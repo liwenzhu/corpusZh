@@ -1,54 +1,72 @@
 var fs = require('fs');
+var readline = require('readline');
+
+// uncomment for debug
+// var showMem = require('./showMemory');
+// showMem(); // for debug
 
 var CORPUS_HOME = "./corpus";
+var EOF = "#!EOF";
+
+var readOptions = {
+		flags: 'r',
+		encoding: null,
+		fd: null,
+		mode: 0666,
+		autoClose: true
+	};
+var writeOptions = {
+		flags: 'a+',
+		encoding: null,
+		mode: 0666
+	};
+
 fs.readdir(CORPUS_HOME, function(err, files) {
 	if(err) throw new Error(err);
 	combineFiles(files);
 });
 
 function combineFiles (files) {
-	// console.log(files.length)
-	var corpus = "";
 	var len = files.length;
-	// var len = 1;
-	// file = files[0];
-	files.forEach(function (file) {
-		readFile(CORPUS_HOME + "/" + file, function(err, text){
-			if(err) throw new Error(err);
-			corpus += text;
-			if(--len === 0)
-				fs.writeFile("./all.txt", corpus, function(err){
-					if(err)
-						throw new Error(err);
-					console.log("finished");
-				});
+	var buf = [];
+	var writeStream = fs.createWriteStream('./all.txt', writeOptions);
+	for (var i = 0; i < len; i++) {
+		readFile(CORPUS_HOME + "/" + files[i], function(err, text){
+			if (text != EOF) {
+				buf.push(text);
+			} else {
+				writeStream.write(Buffer.concat(buf));
+				buf = [];
+			}
 		});
-	}); // files.forEach
+	}
 };
 
 function readFile (filePath, callback) {
-	fs.readFile(filePath, function(err, data){
-		// console.log(data.toString());
-		var text = "";
-		text = formatLines(data.toString().split("\r\n"));
-		// console.log("text:", text);
-		callback(null, text);
-		text = null;
-	});
-};
 
-function formatLines (lines) {
-	var text = "";
-	var i, len = lines.length;
-	for (i = 0; i < len; i++) {
-		text += formatLine(lines[i])+'\n';
-		// if(i < 3)
-		// 	console.log(text);
-	}
-	return text;
+	var readStream = fs.createReadStream(filePath, readOptions);
+	var rl = readline.createInterface({
+		input: readStream,
+		output: process.stdout,
+		terminal: false
+	});
+
+	var count = 0;
+
+	rl.on('line', function (line) {
+		callback(null, formatLine(line));
+		count++;
+	});
+
+	rl.on('close', function(){
+		console.log("end:", count);
+		callback(null, EOF);
+		rl.close();
+	});
+
 };
 
 function formatLine (line) {
 	line = line.split("\t\t");
-	return line[1];
+	return new Buffer(line[1] + '\n');
 };
